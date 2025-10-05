@@ -10,15 +10,33 @@ import (
 type Config struct {
 	TelegramToken string
 	DBPath string
+	WeeklyReportDay string
+	TZ string
 }
 
-func LoadConfig() *Config {
+func Load() *Config {
 	if err := godotenv.Load(); err != nil {
-		log.Println(".env file not found, using environment variables")
+		log.Println(".env file not found; reading environment variables directly")
 	}
 
-	return &Config{
+	cfg := &Config{
 		TelegramToken: os.Getenv("TELEGRAM_TOKEN"),
 		DBPath: os.Getenv("DB_PATH"),
+		WeeklyReportDay: os.Getenv("WEEKLY_REPORT_DAY"),
+		TZ: os.Getenv("TIME_ZONE"),
 	}
+
+	if cfg.DBPath == "" {
+		cfg.DBPath = "tasks.db"
+	}
+
+	if cfg.WeeklyReportDay == "" {
+		cfg.WeeklyReportDay = "SUN"
+	}
+
+	if cfg.TZ == "" {
+		cfg.TZ = "Europe/Bucharest"
+	}
+
+	return cfg
 }
