@@ -1,6 +1,6 @@
 # Telegram Task Manager Bot (Go)
 
-A simple PET-project in Go: Telegram bot for task management and planning
+A simple PET-project in Go: Telegram bot helps users plan their day, received daily reminders, track which tasks are completed and generate weekly performance reports.
 
 ## Features
 -Add tasks with start time and duration
@@ -14,8 +14,12 @@ A simple PET-project in Go: Telegram bot for task management and planning
 
 ## Technologies
 - Go (golang)
-- Libraries [telebot](https://github.com/tucnak/telebot) for Telegram API  
-- [robfig/cron](https://github.com/robfig/cron) for reminders
+- Telebot v3 — working with Telegram API
+- GORM — ORM for working with SQLite
+- robfig/cron v3 — task scheduler
+- go-chart — building charts in reports
+- Docker — project containerisation  
+
 
 ## Launch
 1.Download Go `>=1.21`
