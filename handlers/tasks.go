@@ -9,7 +9,6 @@ import (
 
 	"github.com/1racker/telegram-task-bot/storage"
 	tb "gopkg.in/telebot.v3"
-	"gorm.io/gorm"
 )
 
 type TaskValidator interface {
@@ -20,7 +19,7 @@ type DefaultTaskValidator struct {}
 
 func (v *DefaultTaskValidator) ValidateTaskInput(title, category, timeStr string, priority, duration int) error {
 	if strings.TrimSpace(title) == "" {
-		return fmt.Errorf("category cannot be empty")
+		return fmt.Errorf("title cannot be empty")
 	}
 	if strings.TrimSpace(category) == "" {
 		return fmt.Errorf("category cannot be empty")
@@ -29,7 +28,7 @@ func (v *DefaultTaskValidator) ValidateTaskInput(title, category, timeStr string
 		return fmt.Errorf("priority must be between 1-3")
 	}
 	if duration <= 0 {
-		return fmt.Errorf("category must be positive")
+		return fmt.Errorf("duration must be positive")
 	}
 
 	hourMin := strings.Split(timeStr, ":")
@@ -47,7 +46,7 @@ func (v *DefaultTaskValidator) ValidateTaskInput(title, category, timeStr string
 	return nil
 }
 
-func RegisterTasks(bot *tb.Bot, db *gorm.DB) {
+func RegisterTasks(bot *tb.Bot, repo storage.TaskRepository) {
 	validator := &DefaultTaskValidator{}
 
 	bot.Handle("/add", func(c tb.Context) error {
@@ -95,27 +94,25 @@ func RegisterTasks(bot *tb.Bot, db *gorm.DB) {
 			Status: "new",
 		}
 
-		if err := db.Create(&task).Error; err != nil {
+		if err := repo.Create(&task); err != nil {
 			log.Printf("db create error: %v", err)
 			return c.Send("Error while saving the data.")
 		}
 		return c.Send(fmt.Sprintf("Task '%s' added for %s", title, start.Format("15:04")))
 	})
 	bot.Handle("/today", func(c tb.Context) error {
-		userID := c.Sender(). ID
-		startOfDay := time.Date(time.Now().Year(), time.Now().Month(), time.Now().Day(), 0, 0, 0, 0, time.Now().Location())
-		endOfDay := startOfDay.Add(24 * time.Hour)
+		userID := c.Sender().ID
+		tasks, err := repo.GetTodayTasks(userID)
+		if err != nil {
+			 log.Printf("db query error: %v", err)
+			 return c.Send("Error while executing task")
 
-		var tasks []storage.Task
-		if err := db.Where("user_id = ? AND start_time >= ? AND start_time < ?", userID, startOfDay, endOfDay).Order("priority asc").Find(&tasks).Error; err != nil {
-		return c.Send("Error while executing task")
-		}
-
-		if len(tasks) == 0 {
+		 }
+		 if len(tasks) == 0 {
 			return c.Send("No tasks for today")
 		}
 
-		for _, t := range tasks {
+				for _, t := range tasks {
 			text := fmt.Sprintf("%s\nCategory: %s\nPriority: %d\nTime: %s\nDuration: %d min\nStatus: %s",
 			t.Title, t.Category, t.Priority, t.StartTime.Format("15:04"), t.Duration, t.Status)
 
@@ -129,10 +126,11 @@ func RegisterTasks(bot *tb.Bot, db *gorm.DB) {
 				{postponeBtn, deleteBtn},
 			}
 
-			if err := c.Send(text, &tb.ReplyMarkup{InlineKeyboard: inlineKeys}); err != nil {
+						if err := c.Send(text, &tb.ReplyMarkup{InlineKeyboard: inlineKeys}); err != nil {
 				log.Printf("send message error: %v", err)
 			}
 		}
 		return nil
 	})
 }
+

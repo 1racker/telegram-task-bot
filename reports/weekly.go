@@ -1,78 +1,40 @@
 package reports
 
 import (
+	"bytes"
 	"fmt"
-	"time"
-	"os"
 	"log"
+	"sort"
+	"time"
 
-	"gorm.io/gorm"
 	"github.com/1racker/telegram-task-bot/storage"
 	"github.com/wcharczuk/go-chart/v2"
+	"github.com/wcharczuk/go-chart/v2/drawing"
 )
 
+type DayStat struct {
+	Date string
+	Total int
+	Done int
+	Postponed int
+	Deleted int
+	Started int
+}
 
-func GenerateWeeklyReport(db *gorm.DB, userID int64) (string, string, error) {
-	now := time.Now() 
-	from := now.AddDate(0, 0, -6) 
+func GenerateWeeklyReport(repo storage.TaskRepository, userID int64) (string, []byte, error) {
+	today := time.Now() 
+	from := today.AddDate(0, 0, -6) 
 
-	var tasks []storage.Task 
-	if err := db.Where("user_id = ? AND created_at >= ?", userID, from).Find(&tasks).Error; err != nil {
-		return "", "", fmt.Errorf("db query error: %w", err)
-	} 
+	tasks, err := repo.GetWeeklyTasks(userID, from, today)
+	if err != nil {
+		return "Error retrieving data for the last week.", nil, err
+	}
 
 	if len(tasks) == 0 {
-		return " No tasks for the previous week.", "", nil
+		return " No tasks for the previous week.", nil, nil
 	}
 
-	byDay := map[string]*struct {
-		Total int
-		Done int
-		Postponed int
-		Deleted int
-		Started int
-	} {
-
-	}
-
-	loc := time.Now().Location()
-	var dayKeys []string
-	for i := 0; i < 7; i++ {
-		d := from.AddDate(0, 0, i)
-		key := d.Format("2006-01-02")
-		dayKeys = append(dayKeys, key)
-
-		byDay[key] = struct {
-			Total int
-			Done int
-			Postponed int
-			Deleted int
-			Started int
-		}{0, 0, 0, 0, 0}
-	}
-
-	var completionMinutes []float64 
-
-	for _, t := range tasks { 
-		dayKey := t.CreatedAt.In(loc).Format("2006-01-02") 
-		agg := byDay[dayKey]
-		agg.Total++
-		switch t.Status { 
-		case "done": 
-			agg.Done++  
-			if t.DoneAt != nil { 
-				completionMinutes = append(completionMinutes, t.DoneAt.Sub(t.CreatedAt).Minutes()) 
-			}
-		case "postponed": 
-			agg.Postponed++ 
-		case "deleted": 
-			agg.Deleted++ 
-		case "in_progress": 
-			agg.Started++ 
-		default:
-			byDay[dayKey] = agg
-		}
-	}
+	byDay := make(map[string]*DayStat)
 
 	total := 0
 	done := 0
@@ -80,14 +42,66 @@ func GenerateWeeklyReport(db *gorm.DB, userID int64) (string, string, error) {
 	deleted := 0
 	started := 0
 
-	for _, k := range dayKeys { 
-		v := byDay[k]
-		total += v.Total
-		done += v.Done
-		postponed += v.Postponed
-		deleted += v.Deleted
-		started += v.Started
+	var completionMinutes []float64 
+
+	for _, t := range tasks { 
+		dayKey := t.CreatedAt.Format("2006-01-02") 
+		if _, ok := byDay[dayKey]; !ok {
+			byDay[dayKey] = &DayStat{Date: dayKey}
+		}
+
+		byDay[dayKey].Total++
+		total++
+
+
+		switch t.Status { 
+		case "done": 
+			byDay[dayKey].Done++
+			done++  
+			if t.StartedAt != nil && t.DoneAt != nil { 
+				completionMinutes = append(completionMinutes, t.DoneAt.Sub(*t.StartedAt).Minutes()) 
+			}
+		case "postponed": 
+			byDay[dayKey].Postponed++
+			postponed++ 
+		case "deleted": 
+			byDay[dayKey].Deleted++
+			deleted++ 
+		case "in_progress": 
+			byDay[dayKey].Started++
+			started++ 
+		default:
+		}
 	}
+
+	var days []string
+	for d := range byDay {
+		days = append(days, d)
+	}
+	sort.Strings(days)
+
+
+	bestDay := ""
+	worstDay := ""
+	bestCount := -1
+	worstCount := int(1_000_000)
+
+	details := "" 
+	for _, d := range days { 
+		ds := byDay[d] 
+		details += fmt.Sprintf("%s → total: %d | done: %d | postponed: %d | deleted: %d | in progress: %d\n",
+			ds.Date, ds.Total, ds.Done, ds.Postponed, ds.Deleted, ds.Started)
+
+		if ds.Done > bestCount {
+		bestCount = ds.Done
+		bestDay = ds.Date
+	}
+	if ds.Done < worstCount {
+		worstCount = ds.Done
+		worstDay = ds.Date
+	}
+
+}
 
 	percentDone := 0
 	if total > 0 {
@@ -97,114 +111,99 @@ func GenerateWeeklyReport(db *gorm.DB, userID int64) (string, string, error) {
 	avgCompletion := 0.0
 	if len(completionMinutes) > 0 {
 		sum := 0.0
-		for _, m := range completionMinutes {
-			sum += m
+		for _, v := range completionMinutes {
+			sum += v
 		}
 		avgCompletion = sum / float64(len(completionMinutes))
 	}
 
-	bestDay := ""
-	worstDay := ""
-	bestCount := -1
-	worstCount := int(1_000_000)
 
-	for _, k := range dayKeys {
-		d := byDay[k]
-		if d.Done > bestCount {
-			bestCount = d.Done
-			bestDay = k
-		}
-		if d.Done < worstCount {
-			worstCount = d.Done
-			worstCount = k
-		}
-	}
+report := fmt.Sprintf("Weekly Report (Last 7 days):\n\nTotal tasks: %d\n Done: %d\nPostponed: %d\nDeleted: %d\nIn progress: %d\n\nCompletion rate: %d%%\n\nMost productive day: %s (%d tasks)\nLeast productive day: %s (%d tasks)\n\nAverage completion time: %.1f minutes\n\nDaily breakdown:\n\n%s",
+		total, done, postponed, deleted, started, percentDone, bestDay, bestCount, worstDay, worstCount, avgCompletion, details)
 
-	details := "" 
-	for _, k := range daysKeys { 
-		d := byDay[k] 
-		details += fmt.Sprintf("%s → total: %d |  %d |  %d |  %d |  %d\n",
-			k, d.Total, d.Done, d.Postponed, d.Deleted, d.Started)
-	}
-
-reportText := fmt.Sprintf(
-		"Report for the last 7 days:\n\nAll tasks: %d\nCompleted: %d\nPostponed: %d\nDeleted: %d\nIn progress: %d\n\nPercentage of completed: %d%%\n\nThe most productive day: %s (%d tasks)\nThe less productive day: %s (%d tasks)\n\nAverage compliting time: %.1f minutes\n\nDay by day:\n\n%s",
-		total, done, postponed, deleted, started, percentDone, bestDay, bestCount, worstDay, worstCount, avgCompletion, details,
-	)
-
-	var xValues []time.Time
-	var totalValues []float64
-	var doneValues []float64
-
-	for _, k := range dayKeys {
-		tm, err := time.ParseInLocation("2006-01-02", k, loc)
+		chartBytes, err := generateProductivityChart(days, byDay)
 		if err != nil {
-			log.Printf("reports: failed to parse day key %s: %v", k, err)
-			continue
+			log.Printf("Error generating chart: %v", err)
+			return report, nil, nil
 		}
-		xValues = append(xValues, tm)
-		totalValues = append(totalValues, float64(byDay[k].Total))
-		doneValues = append(doneValues, float64(byDay[k].Done))
+
+	return report, chartBytes, nil
+}
+
+func generateProductivityChart(days []string, byDay map[string]*DayStat) ([]byte, error) {
+    var series []chart.Series
+    
+   colors := []drawing.Color{
+	drawing.ColorFromHex("2ecc71"),
+	drawing.ColorFromHex("3498db"),
+	drawing.ColorFromHex("f39c12"),
+	drawing.ColorFromHex("95a5a6"),
+	drawing.ColorFromHex("e74c3c"),
+   }
+   statusNames := []string{"Done", "In Progress", "Postponed", "New", "Deleted"}
+
+    var xValues []float64
+    var xLabels []string
+    for i, day := range days {
+        xValues = append(xValues, float64(i))
+        t, _ := time.Parse("2006-01-02", day)
+        xLabels = append(xLabels, t.Format("01-02"))
+    }
+    
+    for statusIdx, statusName := range statusNames {
+        var yValues []float64
+        for _, day := range days {
+			stats := byDay[day]
+			var value float64
+			switch  statusName {
+			case "Done":
+				value = float64(stats.Done)
+			case "In Progress":
+				value = float64(stats.Started)
+			case "Postponed":
+				value = float64(stats.Postponed)
+			case "Deleted":
+			value = float64(stats.Deleted)
+			case "New":
+				value = float64(stats.Total-stats.Done-stats.Postponed-stats.Deleted-stats.Started)
+			}
+            yValues = append(yValues, value)
+        }
+        
+        series = append(series, chart.ContinuousSeries{
+            Name:    statusName,
+            Style:   chart.Style{StrokeColor: colors[statusIdx], FillColor: colors[statusIdx].WithAlpha(65), StrokeWidth: 3,},
+            XValues: xValues,
+            YValues: yValues,
+        })
+    }
+    
+	var ticks []chart.Tick
+	for i, label := range xLabels {
+		ticks = append(ticks, chart.Tick{
+			Value: float64(i),
+			Label: label,
+		})
 	}
 
-	if len(xValues) == 0 {
-		return reportText, "", nil
-	}
-
-	totalSeries := chart.TimeSeries{
-		Name:    "Total",         
-		XValues: xValues,          
-		YValues: totalValues,     
-		Style: chart.Style{
-			Show:        true,
-			StrokeWidth: 2.0,
-		},
-	}
-
-	doneSeries := chart.TimeSeries{
-		Name:    "Done",           
-		XValues: xValues,          
-		YValues: doneValues,       
-		Style: chart.Style{
-			Show:        true,
-			StrokeWidth: 3.0,
-			StrokeColor: chart.ColorGreen, 
-			FillColor:   chart.ColorGreen.WithAlpha(64),
-		},
-	}
-
-	g := chart.Chart{
-		Title: fmt.Sprintf("Tasks: total vs done — last 7 days (user %d)", userID), 
-		XAxis: chart.XAxis{
-			Name:           "Date",
-			ValueFormatter: chart.TimeDateValueFormatter, 
-		},
-		Series: []chart.Series{
-			totalSeries, 
-			doneSeries,  
-		},
-	}
-
-	outDir := "reports"
-	if err := os.MkdirAll(outDir, 0755); err != nil {
-		log.Printf("reports: failed to create reports dir: %v", err)
-		return reportText, "", nil
-	}
-
-	fileName := fmt.Sprintf("weekly_%d_%s.png", userID, time.Now().Format("20060102"))
-	filePath := outDir + "/" + fileName
-
-	f, err := os.Create(filePath)
+    graph := chart.Chart{
+        Title: "Weekly Task Overview",
+        Background: chart.Style{
+            Padding: chart.Box{Top: 40, Left: 20, Right: 20, Bottom: 20},
+        },
+        Series: series,
+        XAxis: chart.XAxis{
+            Ticks: ticks,
+        },
+        YAxis: chart.YAxis{
+            Name: "Number of Tasks",
+        },
+    }
+    
+	buffer := bytes.NewBuffer([]byte{})
+	err := graph.Render(chart.PNG, buffer)
 	if err != nil {
-		log.Printf("reports: failed to create file %s: %v", filePath, err)
-		return reportText, "", nil
+		return nil, err
 	}
-	defer f.Close()
-
-	if err := g.Render(chart.PNG, f); err != nil {
-		log.Printf("reports: failed to render chart: %v", err)
-		return reportText, "", nil
-	}
-
-	return reportText, filePath, nil
+	return buffer.Bytes(), nil
 }

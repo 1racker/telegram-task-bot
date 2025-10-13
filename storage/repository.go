@@ -19,6 +19,10 @@ type GormTaskRepository struct {
 	db *gorm.DB
 }
 
+func NewTaskRepository(db *gorm.DB) TaskRepository {
+	return &GormTaskRepository{db: db}
+}
+
 func (r *GormTaskRepository) Create(task *Task) error {
 	return r.db.Create(task).Error
 }
@@ -37,6 +41,7 @@ func (r *GormTaskRepository) GetTodayTasks(userID int64) ([]Task, error) {
 	var tasks []Task
 	startOfDay := time.Now().Truncate(24 * time.Hour)
 	endOfDy := startOfDay.Add(24 * time.Hour)
+	
 	err := r.db.Where("user_id = ? AND start_time >= ? AND start_time < ?",
  userID, startOfDay, endOfDy).Order("priority as c").Find(&tasks).Error
  return tasks, err
