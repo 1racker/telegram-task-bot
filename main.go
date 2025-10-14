@@ -13,6 +13,12 @@ import (
 func main() {
 	cfg := config.Load()
 
+	if cfg.TelegramToken == "" {
+		log.Fatal("TELEGRAM_TOKEN is empty")
+	}
+	log.Printf("Token length: %d characters", len(cfg.TelegramToken))
+	log.Printf("Token starts with: %s", cfg.TelegramToken[:10])
+
 	db := storage.InitDB(cfg.DBPath)
 
 	repo := storage.NewTaskRepository(db)
