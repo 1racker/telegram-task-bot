@@ -13,6 +13,10 @@ type TaskRepository interface {
 	GetTodayTasks(userID int64) ([]Task, error)
 	GetWeeklyTasks(userID int64, from, to time.Time) ([]Task, error)
 	GetDistinctUserIDs() ([]int64, error)
+	MarkDone(id uint) error
+	Postpone(id uint, newTime time.Time) error
+	Delete(id uint) error
+	GetStats(userID int64) (total, done int64, err error)
 }
 
 type GormTaskRepository struct {
@@ -43,7 +47,7 @@ func (r *GormTaskRepository) GetTodayTasks(userID int64) ([]Task, error) {
 	endOfDy := startOfDay.Add(24 * time.Hour)
 	
 	err := r.db.Where("user_id = ? AND start_time >= ? AND start_time < ?",
- userID, startOfDay, endOfDy).Order("priority as c").Find(&tasks).Error
+ userID, startOfDay, endOfDy).Order("priority ASC").Find(&tasks).Error
  return tasks, err
 }
 
@@ -58,4 +62,26 @@ func (r *GormTaskRepository) GetDistinctUserIDs() ([]int64, error) {
 	var userIDs []int64
 	err := r.db.Model(&Task{}).Distinct("user_id").Pluck("user_id", &userIDs).Error
 	return userIDs, err
+}
+
+func (r *GormTaskRepository) MarkDone(id uint) error {
+	return r.db.Model(&Task{}).Where("id = ?", id).Update("status", "done").Error
+}
+
+func(r *GormTaskRepository) Postpone(id uint, newTime time.Time) error {
+	return r.db.Model(&Task{}).Where("id = ?", id).
+	Updates(map[string]interface{}{"status": "postponed", "start_time": newTime}).Error
+}
+
+func(r *GormTaskRepository) Delete(id uint) error {
+	return r.db.Delete(&Task{}, id). Error
+}
+
+func(r *GormTaskRepository) GetStats (userID int64) (total, done int64, err error) {
+	err = r.db.Model(&Task{}).Where("user_id = ?", userID).Count(&total).Error
+	if err != nil {
+		return
+	}
+	err = r.db.Model(&Task{}).Where("user_id = ? AND status = ?", userID, "done").Count(&done).Error
+	return
 }
