@@ -1,0 +1,48 @@
+name: Go CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build the app
+        run: go build -v -o taskbot ./cmd || go build -v -o taskbot ./  # Собираем бинарник
+
+      - name: Verify build output
+        run: ls -l taskbot
+
+  deploy:
+    name: Deploy to Render
+    needs: build               
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy using Render API
+        uses: render-examples/deploy-action@v1
+        env:
+          #From GitHub Secrets
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}      
+          SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}        
+          BRANCH: main                                        
+          AUTO_APPROVE: true                                  
+
+      - name: Deployment confirmation
+        run: echo "✅ Successfully deployed to Render!"

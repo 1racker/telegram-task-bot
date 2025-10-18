@@ -1,0 +1,27 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: taskbot_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: password
+      POSRGRES_DB: ${DB_NAME:-taskbot}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  bot:
+    build: .
+    container_name: telegram_task_bot
+    restart: always
+    depends_on:
+      - db
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      DATABASE_URL: postgres://postgres:passwordd@db:5432/taskbot?sslmode=disable
+    command: ["./bot"]
+volumes:
+  pgdata:
