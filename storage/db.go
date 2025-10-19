@@ -26,7 +26,7 @@ type Task struct {
 func InitDB(path string) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
 	if err != nil {
-		log.Fatal("error connecting to db: %v", err)
+		log.Fatalf("error connecting to db: %v", err)
 	}
 
 	if err := db.AutoMigrate(&Task{}); err != nil {

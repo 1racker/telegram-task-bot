@@ -20,10 +20,10 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		TelegramToken: os.Getenv("TELEGRAM_TOKEN"),
+		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
 		DBPath: os.Getenv("DB_PATH"),
 		WeeklyReportDay: os.Getenv("WEEKLY_REPORT_DAY"),
-		TZ: os.Getenv("TIME_ZONE"),
+		TZ: os.Getenv("TIMEZONE"),
 	}
 
 	if cfg.DBPath == "" {

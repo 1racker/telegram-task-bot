@@ -7,29 +7,37 @@ import (
 	"github.com/1racker/telegram-task-bot/storage"
 	"github.com/1racker/telegram-task-bot/handlers"
 	"time"
-	"gopkg.in/telebot.v3"
+	tb "gopkg.in/telebot.v3"
 )
 
 func main() {
 	cfg := config.Load()
 
-	db := storage.InitDB("tasks.db")
+	if cfg.TelegramToken == "" {
+		log.Fatal("TELEGRAM_BOT_TOKEN is empty")
+	}
+	log.Printf("Token length: %d characters", len(cfg.TelegramToken))
+	log.Printf("Token starts with: %s", cfg.TelegramToken[:10])
 
-	pref := telebot.Settings{
+	db := storage.InitDB(cfg.DBPath)
+
+	repo := storage.NewTaskRepository(db)
+
+	pref := tb.Settings{
 		Token: cfg.TelegramToken,
-		Poller: &telebot.LongPoller{Timeout: 10 * time.Second},
+		Poller: &tb.LongPoller{Timeout: 10 * time.Second},
 	}
 
-	bot ,err := telebot.NewBot(pref)
+	bot ,err := tb.NewBot(pref)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	handlers.RegisterTasks(bot, db)
-	handlers.RegisterReminderHandlers(bot, db)
-	handlers.RegisterStatsHandlers(bot, db)
+	handlers.RegisterTasks(bot, repo)
+	handlers.RegisterReminderHandlers(bot, repo)
+	handlers.RegisterStatsHandlers(bot, repo)
 
-	cron.StartScheduler(bot, db, cfg.TZ, cfg.WeeklyReportDay)
+	cron.StartScheduler(bot, repo, cfg.TZ, cfg.WeeklyReportDay)
 
 	log.Println("Bot launched...")
 	bot.Start()
