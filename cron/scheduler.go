@@ -4,16 +4,16 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"bytes"
 
 	"github.com/1racker/telegram-task-bot/reports"
 	"github.com/1racker/telegram-task-bot/storage"
 	"github.com/robfig/cron/v3"
 	
 	tb "gopkg.in/telebot.v3"
-	"gorm.io/gorm"
 )
 
-func StartScheduler(bot *tb.Bot, db *gorm.DB, tz string, weeklyDay string) {
+func StartScheduler(bot *tb.Bot, repo storage.TaskRepository, tz string, weeklyDay string) {
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
 		log.Printf("timezone load error: %v - using Local", err)
@@ -25,18 +25,10 @@ func StartScheduler(bot *tb.Bot, db *gorm.DB, tz string, weeklyDay string) {
 	_, err = c.AddFunc("@every 1m", func() {
 		now := time.Now().In(loc)
 
-		var userIDs []int64
-		rows, err := db.Model(&storage.Task{}).Distinct("user_id").Rows()
+		userIDs, err := repo.GetDistinctUserIDs()
 		if err != nil {
-			log.Printf("cron: error querying user: %v", err)
+			log.Printf("cron: error querying users: %v", err)
 			return
-		}
-		defer rows.Close()
-
-		var uid int64
-		for rows.Next() {
-			_ = rows.Scan(&uid)
-			userIDs = append(userIDs, uid)
 		}
 
 		for _, userID := range userIDs {
@@ -56,22 +48,29 @@ func StartScheduler(bot *tb.Bot, db *gorm.DB, tz string, weeklyDay string) {
 
 	weeklyExpr := fmt.Sprintf("0 9 * * %s", weeklyDay)
 	_, err = c.AddFunc(weeklyExpr, func()  {
-		var userIDs []int64
-		rows, err := db.Model(&storage.Task{}).Distinct("user_id").Rows()
+		userIDs, err := repo.GetDistinctUserIDs()
 		if err != nil {
 			log.Printf("cron: error querying users for weekly: %v", err)
 			return
 		}
-		defer rows.Close()
-		var uid int64
-		for rows.Next() {
-			_ = rows.Scan(&uid)
-			userIDs = append(userIDs, uid)
-		}
 
 		for _, userID := range userIDs {
-			report := reports.GenerateWeeklyReport(db, userID)
+			report, chartData, err := reports.GenerateWeeklyReport(repo, userID)
+			if err != nil {
+				log.Printf("cron: error generating weekly report for user %d: %v", userID, err)
+				continue
+			}
+
 			recipient := &tb.User{ID: userID}
+			if chartData != nil {
+				photo := &tb.Photo {
+					File: tb.FromReader(bytes.NewReader(chartData)),
+					Caption: "Your Weekly Task Statisitics",
+				}
+				if _, err := bot.Send(recipient, photo); err != nil {
+					log.Printf("cron: send weekly chart error to %d: %v", userID, err)
+				}
+			}
 			if _, err := bot.Send(recipient, report); err != nil {
 				log.Printf("cron: send weekly report error to %d: %v", userID, err)
 			}
@@ -81,4 +80,5 @@ func StartScheduler(bot *tb.Bot, db *gorm.DB, tz string, weeklyDay string) {
 		log.Printf("cron add weekly error: %v", err)
 	}
 	c.Start()
+	log.Printf("Scheduler started")
 }
