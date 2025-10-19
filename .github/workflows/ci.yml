@@ -1,4 +1,4 @@
-name: Go CI
+name: CI/CD Pipeleine
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: ["main"]
 
 jobs:
-  build:
+  build-test-deploy:
     name: Build and Test
     runs-on: ubuntu-latest
 
@@ -18,31 +18,31 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.23" # или твоя версия
 
-      - name: Build the app
-        run: go build -v -o taskbot ./cmd || go build -v -o taskbot ./  # Собираем бинарник
+      - name: Build binary
+        run: go build -v -o bot ./...
 
-      - name: Verify build output
-        run: ls -l taskbot
+      - name: Run tests
+        run: go test ./... -v
 
-  deploy:
-    name: Deploy to Render
-    needs: build               
-    runs-on: ubuntu-latest
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Deploy using Render API
-        uses: render-examples/deploy-action@v1
-        env:
-          #From GitHub Secrets
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}      
-          SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}        
-          BRANCH: main                                        
-          AUTO_APPROVE: true                                  
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKER_USERNAME }}/telegram-task-bot:latest .
 
-      - name: Deployment confirmation
-        run: echo "✅ Successfully deployed to Render!"
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKER_USERNAME }}/telegram-task-bot:latest
+
+      - name: Trigger Render Deploy
+        run: |
+          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
