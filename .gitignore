@@ -2,6 +2,7 @@
 /build/
 *.exe
 *.out
+.DS_STORE
 
 .vscode/
 .idea/
@@ -10,7 +11,14 @@
 
 *.db
 *.sqlite
+*.sqlite3
+
+/telegram-task-bot
+/Telegram-task-bot
+/telegram-task-bot1
 
 .dockerignore
+Dockerfile
 
 *.log
+
