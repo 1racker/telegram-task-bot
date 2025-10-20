@@ -21,7 +21,7 @@ jobs:
           go-version: "1.23" # или твоя версия
 
       - name: Build binary
-        run: go build -v -o bot ./...
+        run: go build -v -o bot ./main.go
 
       - name: Run tests
         run: go test ./... -v
