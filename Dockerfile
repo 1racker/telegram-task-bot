@@ -5,7 +5,7 @@ RUN go mod download
 COPY . .
 RUN go build -ldflags="-s -w" -o bot main.go
 
-FROM alpine:latest
+FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
 COPY --from=builder /app/bot /bot
 EXPOSE 8080
