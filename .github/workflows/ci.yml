@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-test-deploy:
-    name: Build and Test
+    name: Build, Lint and Deploy
     runs-on: ubuntu-latest
 
     steps:
@@ -46,4 +46,7 @@ jobs:
 
       - name: Trigger Render Deploy
         run: |
-          curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
+          curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+          -H "Accept: application/json" \
+          -H "Content-Type: application/json"
