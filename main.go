@@ -58,5 +58,10 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	go http.ListenAndServe(":"+port, nil)
+	go func() {
+		log.Fatal(http.ListenAndServe(":"+port, nil))
+
+	}()
+
+	bot.Start()
 }
