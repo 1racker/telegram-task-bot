@@ -3,7 +3,7 @@ package storage
 import (
 	"log"
 	"time"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -22,16 +22,19 @@ type Task struct {
 	DoneAt *time.Time
 	Postpones int 
 }
+var DB *gorm.DB
 
-func InitDB(path string) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{})
+func InitDB(dsn string) *gorm.DB {
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("error connecting to db: %v", err)
+		log.Fatalf("error connecting to PostgreSQL: %v", err)
 	}
 
 	if err := db.AutoMigrate(&Task{}); err != nil {
-		log.Fatalf("failed to migrate db: %v", err)
+		log.Fatalf("auto migration failed: %v", err)
 	}
 	
+	log.Println("Connected to PostgreSQL succesfully")
+	DB = db
 	return db
 }

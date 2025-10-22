@@ -22,7 +22,7 @@ func main() {
 	log.Printf("Token length: %d characters", len(cfg.TelegramToken))
 	log.Printf("Token starts with: %s", cfg.TelegramToken[:10])
 
-	db := storage.InitDB(cfg.DBPath)
+	db := storage.InitDB(cfg.DBURL)
 
 	repo := storage.NewTaskRepository(db)
 

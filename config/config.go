@@ -9,7 +9,7 @@ import (
 
 type Config struct {
 	TelegramToken string
-	DBPath string
+	DBURL string
 	WeeklyReportDay string
 	TZ string
 }
@@ -21,13 +21,13 @@ func Load() *Config {
 
 	cfg := &Config{
 		TelegramToken: os.Getenv("TELEGRAM_BOT_TOKEN"),
-		DBPath: os.Getenv("DB_PATH"),
+		DBURL: os.Getenv("DATABASE_URL"),
 		WeeklyReportDay: os.Getenv("WEEKLY_REPORT_DAY"),
 		TZ: os.Getenv("TIMEZONE"),
 	}
 
-	if cfg.DBPath == "" {
-		cfg.DBPath = "tasks.db"
+	if cfg.DBURL == "" {
+		cfg.DBURL = "tasks.db"
 	}
 
 	if cfg.WeeklyReportDay == "" {
